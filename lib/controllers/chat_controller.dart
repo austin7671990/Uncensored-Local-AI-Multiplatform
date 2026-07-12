@@ -69,6 +69,21 @@ class ChatController extends GetxController {
     }
   }
 
+  /// Add a message to the active chat without triggering LLM generation.
+  /// Used by the agent controller for tool-enabled conversations.
+  void addMessage(String text, {required String role}) {
+    final chat = activeChat;
+    if (chat == null) return;
+
+    final roleEnum = role == 'assistant' ? MessageRole.assistant : MessageRole.user;
+    final msg = MessageModel(role: roleEnum, content: text.trim());
+    chat.messages.add(msg);
+    if (role == 'user') chat.autoTitle();
+    chat.updatedAt = DateTime.now();
+    _storage.saveChat(chat);
+    chats.refresh();
+  }
+
   /// Send a user message and stream AI response.
   Future<void> sendMessage(String text, {String? modelFilename}) async {
     if (text.trim().isEmpty) return;

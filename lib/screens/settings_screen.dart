@@ -6,10 +6,14 @@ import '../theme/app_colors.dart';
 import '../controllers/chat_controller.dart';
 import '../controllers/theme_controller.dart';
 import '../controllers/model_controller.dart';
+import '../controllers/agent_controller.dart';
 import '../services/local_api_server_service.dart';
 import '../services/model_manager.dart';
 import '../services/background_optimizer_service.dart';
 import '../services/chat_storage_service.dart';
+import '../services/llm_service.dart';
+import '../services/tool_service.dart';
+import '../routes/app_routes.dart';
 
 class SettingsScreen extends StatelessWidget {
   /// When true, no Scaffold — just the body content for embedding in tabs.
@@ -150,11 +154,97 @@ class _SettingsBody extends StatelessWidget {
                     ),
                     onTap: () async {
                       await BackgroundOptimizerService.openBatterySettings();
-                      // Ignore setState, it will rebuild on next visit
                     },
                   ),
                 ),
               ],
+
+              const SizedBox(height: 28),
+
+              // ═══════════════════════════════════════════════
+              // AGENTIC AI SECTIONS (NEW)
+              // ═══════════════════════════════════════════════
+              _sectionHeader(context, 'AGENTIC AI'),
+              const SizedBox(height: 8),
+
+              // Voice Mode
+              ListTile(
+                leading: const Icon(Icons.keyboard_voice, color: Colors.blueAccent),
+                title: const Text('Voice Mode'),
+                subtitle: Text('Full-screen voice conversation', style: TextStyle(color: context.textD, fontSize: 12)),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.blueAccent),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                onTap: () => Get.toNamed(AppRoutes.voiceMode),
+              ),
+
+              // Tool toggle
+              Obx(() => ListTile(
+                leading: Icon(Icons.build, color: Get.find<ToolService>().toolsEnabled.value ? Colors.amber : context.textM),
+                title: const Text('Tool Access'),
+                subtitle: Text(Get.find<ToolService>().toolsEnabled.value ? 'Tools are ENABLED' : 'Tools are disabled', style: TextStyle(color: context.textD, fontSize: 12)),
+                trailing: Switch(
+                  value: Get.find<ToolService>().toolsEnabled.value,
+                  onChanged: (_) => Get.find<ToolService>().toggleTools(),
+                  activeColor: Colors.amber,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              )),
+
+              // Work Folder
+              ListTile(
+                leading: const Icon(Icons.folder_open, color: Colors.green),
+                title: const Text('Work Folder'),
+                subtitle: Text('Browse agent-created code files', style: TextStyle(color: context.textD, fontSize: 12)),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.green),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                onTap: () => Get.toNamed(AppRoutes.workFolder),
+              ),
+
+              // Memory Browser
+              ListTile(
+                leading: const Icon(Icons.memory, color: Colors.purple),
+                title: const Text('Memory Browser'),
+                subtitle: Text('View stored facts and memories', style: TextStyle(color: context.textD, fontSize: 12)),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.purple),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                onTap: () => Get.toNamed(AppRoutes.memoryBrowser),
+              ),
+
+              // Device Info
+              ListTile(
+                leading: const Icon(Icons.devices, color: Colors.teal),
+                title: const Text('Device Info'),
+                subtitle: Text('Hardware and software details', style: TextStyle(color: context.textD, fontSize: 12)),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.teal),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                onTap: () => Get.toNamed(AppRoutes.deviceInfo),
+              ),
+
+              // Context Size
+              const SizedBox(height: 8),
+              Obx(() {
+                final llmService = Get.find<LlmService>();
+                return ListTile(
+                  leading: const Icon(Icons.expand, color: Colors.cyan),
+                  title: Text('Context Size: ${llmService.currentContextSize} tokens'),
+                  subtitle: Slider(
+                    value: llmService.currentContextSize.toDouble(),
+                    min: 512,
+                    max: 8192,
+                    divisions: 15,
+                    label: llmService.currentContextSize.toString(),
+                    onChanged: (v) => llmService.setContextSize(v.toInt()),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                );
+              }),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  '4096 recommended for 12GB devices. Higher = longer memory but more RAM usage.',
+                  style: TextStyle(color: context.textD, fontSize: 11),
+                ),
+              ),
 
               const SizedBox(height: 28),
 
@@ -655,7 +745,7 @@ class _SettingsBody extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      'Uncensored Local AI v2.0.0',
+                      'Agentic AI v2.0.0',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -771,37 +861,17 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
   late double _gpuLayers;
   bool _showManual = false;
 
-  // Auto-detect the best backend and GPU layers for this device
   static Map<String, dynamic> _detectBestConfig() {
     if (!Platform.isAndroid && !Platform.isIOS) {
-      // Desktop: CPU is safest, Vulkan if available
       return {'backend': 'cpu', 'gpuLayers': 0, 'reason': 'CPU mode — most compatible on desktop'};
     }
-
-    // Android/iOS: detect available RAM and processor count
     final cores = Platform.numberOfProcessors;
-    
     if (cores >= 8) {
-      // High-end device (e.g. Snapdragon 8 Gen 2+, Dimensity 9000+)
-      return {
-        'backend': 'opencl',
-        'gpuLayers': 33,
-        'reason': 'OpenCL GPU — best for high-end SoC ($cores cores detected)',
-      };
+      return {'backend': 'vulkan', 'gpuLayers': 99, 'reason': 'Vulkan GPU — best for high-end SoC ($cores cores, 12GB+ RAM)'};
     } else if (cores >= 6) {
-      // Mid-range device
-      return {
-        'backend': 'cpu',
-        'gpuLayers': 0,
-        'reason': 'CPU mode — safe for mid-range devices ($cores cores)',
-      };
+      return {'backend': 'opencl', 'gpuLayers': 33, 'reason': 'OpenCL GPU — good for mid-range devices ($cores cores)'};
     } else {
-      // Low-end device
-      return {
-        'backend': 'cpu',
-        'gpuLayers': 0,
-        'reason': 'CPU mode — optimized for lower-end devices ($cores cores)',
-      };
+      return {'backend': 'cpu', 'gpuLayers': 0, 'reason': 'CPU mode — optimized for lower-end devices ($cores cores)'};
     }
   }
 
@@ -820,18 +890,12 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
     });
     widget.storage.backendType = _backend;
     widget.storage.gpuLayers = _gpuLayers.toInt();
-    Get.snackbar(
-      'Auto Config Applied',
-      config['reason'] as String,
-      snackPosition: SnackPosition.BOTTOM,
-      duration: const Duration(seconds: 2),
-    );
+    Get.snackbar('Auto Config Applied', config['reason'] as String, snackPosition: SnackPosition.BOTTOM, duration: const Duration(seconds: 2));
   }
 
   void _saveBackend(String val) {
     setState(() => _backend = val);
     widget.storage.backendType = val;
-    // Auto-set sensible GPU layers when switching
     if (val == 'cpu') {
       setState(() => _gpuLayers = 0);
       widget.storage.gpuLayers = 0;
@@ -848,12 +912,9 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
 
   String get _currentConfigLabel {
     switch (_backend) {
-      case 'vulkan':
-        return 'GPU (Vulkan) • ${_gpuLayers.toInt()} layers';
-      case 'opencl':
-        return 'GPU (OpenCL) • ${_gpuLayers.toInt()} layers';
-      default:
-        return 'CPU Only';
+      case 'vulkan': return 'GPU (Vulkan) • ${_gpuLayers.toInt()} layers';
+      case 'opencl': return 'GPU (OpenCL) • ${_gpuLayers.toInt()} layers';
+      default: return 'CPU Only';
     }
   }
 
@@ -871,25 +932,17 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Recommended Auto Config ──
           Row(
             children: [
               Icon(Icons.auto_awesome_rounded, size: 18, color: AppColors.accent),
               const SizedBox(width: 8),
-              Text(
-                'Compute Device',
-                style: TextStyle(color: context.text, fontSize: 15, fontWeight: FontWeight.w600),
-              ),
+              Text('Compute Device', style: TextStyle(color: context.text, fontSize: 15, fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            'Current: $_currentConfigLabel',
-            style: TextStyle(color: context.textM, fontSize: 12),
-          ),
+          Text('Current: $_currentConfigLabel', style: TextStyle(color: context.textM, fontSize: 12)),
           const SizedBox(height: 12),
 
-          // Recommended button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -917,10 +970,7 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
                 Icon(Icons.info_outline_rounded, size: 14, color: AppColors.accent),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    autoConfig['reason'] as String,
-                    style: TextStyle(color: context.textM, fontSize: 11),
-                  ),
+                  child: Text(autoConfig['reason'] as String, style: TextStyle(color: context.textM, fontSize: 11)),
                 ),
               ],
             ),
@@ -928,7 +978,6 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
 
           const SizedBox(height: 16),
 
-          // ── Manual Override Toggle ──
           InkWell(
             onTap: () => setState(() => _showManual = !_showManual),
             borderRadius: BorderRadius.circular(8),
@@ -936,20 +985,9 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
-                  Icon(
-                    _showManual ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: context.textM,
-                  ),
+                  Icon(_showManual ? Icons.expand_less : Icons.expand_more, size: 18, color: context.textM),
                   const SizedBox(width: 4),
-                  Text(
-                    'Manual Override',
-                    style: TextStyle(
-                      color: context.textM,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  Text('Manual Override', style: TextStyle(color: context.textM, fontSize: 13, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
@@ -970,20 +1008,11 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'GPU Layers',
-                  style: TextStyle(color: context.text, fontSize: 14),
-                ),
+                Text('GPU Layers', style: TextStyle(color: context.text, fontSize: 14)),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: context.bgInput,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _gpuLayers.toInt().toString(),
-                    style: TextStyle(color: context.text, fontWeight: FontWeight.bold),
-                  ),
+                  decoration: BoxDecoration(color: context.bgInput, borderRadius: BorderRadius.circular(8)),
+                  child: Text(_gpuLayers.toInt().toString(), style: TextStyle(color: context.text, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -1023,18 +1052,12 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
           decoration: BoxDecoration(
             color: selected ? AppColors.accent : context.bgInput,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected ? AppColors.accent : context.border,
-            ),
+            border: Border.all(color: selected ? AppColors.accent : context.border),
           ),
           child: Center(
             child: Text(
               label,
-              style: TextStyle(
-                color: selected ? Colors.white : context.text,
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              ),
+              style: TextStyle(color: selected ? Colors.white : context.text, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1043,4 +1066,3 @@ class _HardwareSettingsCardState extends State<_HardwareSettingsCard> {
     );
   }
 }
-

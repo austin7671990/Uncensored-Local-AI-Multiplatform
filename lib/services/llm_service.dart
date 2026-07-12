@@ -176,10 +176,9 @@ class LlmService extends GetxService {
         preferredBackend: parsedBackend,
         numberOfThreads: effectiveThreads,
         numberOfThreadsBatch: effectiveThreads,
-        flashAttention: true, // -- ADDED: Flash Attention for speed --
       );
 
-      log?.info('Backend=$parsedBackend, GPU layers=$userGpuLayers, ctx=$contextSize, threads=$effectiveThreads, flashAttn=true', source: 'LLM');
+      log?.info('Backend=$parsedBackend, GPU layers=$userGpuLayers, ctx=$contextSize, threads=$effectiveThreads', source: 'LLM');
 
       await _engine!.loadModel(path, modelParams: params);
       progressTimer.cancel();

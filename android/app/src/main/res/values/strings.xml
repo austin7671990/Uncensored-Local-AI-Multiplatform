@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">
+        Agentic AI Accessibility Service enables the AI assistant to control your device through voice commands.
+        This service can read screen content, tap and swipe on elements, type text, press system keys,
+        and take screenshots. All actions require your explicit confirmation before execution.
+        You can disable this service at any time in Settings &gt; Accessibility.
+    </string>
+</resources>

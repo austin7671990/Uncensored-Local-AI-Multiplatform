@@ -140,13 +140,13 @@ class MemoryService extends GetxService {
 
   Future<void> extractAndStoreFacts(String conversation) async {
     final patterns = [
-      RegExp(r'[Mm]y (\w+(?:\s+\w+)*) is ([^.]+)'),
-      RegExp(r'[Ii] (?:like|love|prefer) ([^.]+)'),
-      RegExp(r'[Ii] am ([^.]+)'),
-      RegExp(r'[Ii] (?:don\'t like|hate) ([^.]+)'),
-      RegExp(r'[Ii] (?:want|need) ([^.]+)'),
-      RegExp(r'[Ii] live in ([^.]+)'),
-      RegExp(r'[Ii] work (?:at|for) ([^.]+)'),
+      RegExp(r"[Mm]y (\w+(?:\s+\w+)*) is ([^.]+)"),
+      RegExp(r"[Ii] (?:like|love|prefer) ([^.]+)"),
+      RegExp(r"[Ii] am ([^.]+)"),
+      RegExp(r"[Ii] (?:don\'t like|hate) ([^.]+)"),
+      RegExp(r"[Ii] (?:want|need) ([^.]+)"),
+      RegExp(r"[Ii] live in ([^.]+)"),
+      RegExp(r"[Ii] work (?:at|for) ([^.]+)"),
     ];
     for (final pattern in patterns) {
       for (final match in pattern.allMatches(conversation)) {

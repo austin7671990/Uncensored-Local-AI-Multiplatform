@@ -1,0 +1,9 @@
+Agentic AI v2.0.0
+- Hierarchical memory system (SQLite + FTS5)
+- 13 device control tools always available
+- Voice mode with animated orb
+- Work folder with sandbox IDE
+- Context window fix (1024 -> 4096)
+- Flash attention enabled
+- Accessibility service ready
+- Z Fold 6 optimized

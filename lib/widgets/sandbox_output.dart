@@ -134,7 +134,8 @@ class SandboxOutput extends StatelessWidget {
                           ],
                         ),
                       ),
-          ),n        ],
+          ),
+        ],
       ),
     );
   }

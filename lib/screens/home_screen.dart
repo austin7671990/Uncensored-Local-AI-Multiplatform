@@ -88,21 +88,26 @@ class _HomeScreenState extends State<HomeScreen> {
     _msgController.clear();
     _autoScrollToBottom = true;
 
-    // Use agent controller for tool-enabled responses
-    _chatCtrl.addMessage(text, role: 'user');
-    _scrollToBottom(force: true);
-
-    _agent.processMessage(text).then((response) {
-      _chatCtrl.addMessage(response, role: 'assistant');
+    // Route based on tool toggle state
+    if (_tools.toolsEnabled.value) {
+      // Agent path: process through agent controller with tool access
+      _chatCtrl.addMessage(text, role: 'user');
       _scrollToBottom(force: true);
-    });
+      _agent.processMessage(text).then((response) {
+        _chatCtrl.addMessage(response, role: 'assistant');
+        _scrollToBottom(force: true);
+      });
+    } else {
+      // Direct path: use ChatController.sendMessage for normal LLM chat
+      _chatCtrl.sendMessage(text, modelFilename: _modelCtrl.selectedModelFilename.value);
+      _scrollToBottom(force: true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width >= 768;
-
     return Stack(
       children: [
         if (isDesktop) _buildDesktopLayout() else _buildMobileLayout(),
@@ -111,45 +116,58 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // AGENT STATUS BAR
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildAgentStatusBar() {
     return Obx(() {
       final state = _agent.state.value;
       if (state == AgentState.idle) return const SizedBox.shrink();
+
+      if (state == AgentState.confirming) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          color: Colors.orange.shade800,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _agent.currentAction.value,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _agent.confirmPendingAction().then((response) {
+                      _chatCtrl.addMessage(response, role: 'assistant');
+                    }),
+                    icon: const Icon(Icons.check, size: 14, color: Colors.white),
+                    label: const Text('YES', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _agent.denyPendingAction(),
+                    icon: const Icon(Icons.close, size: 14, color: Colors.white),
+                    label: const Text('NO', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }
+
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
         color: _agentStatusColor(state),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _agent.currentAction.value,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            if (state == AgentState.confirming)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      // User confirmed - continue with tool execution
-                    },
-                    child: const Text('YES', style: TextStyle(color: Colors.white)),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      // User denied
-                    },
-                    child: const Text('NO', style: TextStyle(color: Colors.white70)),
-                  ),
-                ],
-              ),
-          ],
+        child: Text(
+          _agent.currentAction.value,
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+          textAlign: TextAlign.center,
         ),
       );
     });
@@ -159,15 +177,13 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (state) {
       case AgentState.planning: return Colors.purple;
       case AgentState.executingTool: return Colors.amber.shade800;
+      case AgentState.observing: return Colors.blue.shade800;
       case AgentState.confirming: return Colors.orange;
       case AgentState.error: return Colors.red;
       default: return Colors.blueGrey;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // MOBILE LAYOUT
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildMobileLayout() {
     return Scaffold(
       key: _mobileScaffoldKey,
@@ -186,12 +202,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.accentGradient,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(gradient: AppColors.accentGradient, borderRadius: BorderRadius.circular(8)),
                       child: const Icon(Icons.bolt_rounded, size: 18, color: Colors.white),
                     ),
                     const SizedBox(width: 10),
@@ -199,24 +211,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Spacer(),
                     IconButton(
                       icon: Icon(Icons.edit_square, size: 20, color: context.textM),
-                      onPressed: () {
-                        _chatCtrl.newChat();
-                        Navigator.pop(context);
-                      },
+                      onPressed: () { _chatCtrl.newChat(); Navigator.pop(context); },
                     ),
                   ],
                 ),
               ),
               Expanded(
                 child: ChatSidebar(
-                  onNewChat: () {
-                    _chatCtrl.newChat();
-                    Navigator.pop(context);
-                  },
-                  onSelectChat: (id) {
-                    _chatCtrl.switchChat(id);
-                    Navigator.pop(context);
-                  },
+                  onNewChat: () { _chatCtrl.newChat(); Navigator.pop(context); },
+                  onSelectChat: (id) { _chatCtrl.switchChat(id); Navigator.pop(context); },
                   onDeleteChat: (id) => _chatCtrl.deleteChat(id),
                   showNewChatButton: false,
                 ),
@@ -250,21 +253,9 @@ class _HomeScreenState extends State<HomeScreen> {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           height: 64,
           destinations: [
-            NavigationDestination(
-              icon: Icon(Icons.chat_outlined, color: context.textM),
-              selectedIcon: const Icon(Icons.chat_rounded, color: AppColors.accent),
-              label: 'Chat',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.widgets_outlined, color: context.textM),
-              selectedIcon: const Icon(Icons.widgets_rounded, color: AppColors.accent),
-              label: 'Models',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined, color: context.textM),
-              selectedIcon: const Icon(Icons.settings_rounded, color: AppColors.accent),
-              label: 'Settings',
-            ),
+            NavigationDestination(icon: Icon(Icons.chat_outlined, color: context.textM), selectedIcon: const Icon(Icons.chat_rounded, color: AppColors.accent), label: 'Chat'),
+            NavigationDestination(icon: Icon(Icons.widgets_outlined, color: context.textM), selectedIcon: const Icon(Icons.widgets_rounded, color: AppColors.accent), label: 'Models'),
+            NavigationDestination(icon: Icon(Icons.settings_outlined, color: context.textM), selectedIcon: const Icon(Icons.settings_rounded, color: AppColors.accent), label: 'Settings'),
           ],
         ),
       ),
@@ -317,16 +308,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: context.bg,
-        border: Border(bottom: BorderSide(color: context.border, width: 0.5)),
-      ),
+      decoration: BoxDecoration(color: context.bg, border: Border(bottom: BorderSide(color: context.border, width: 0.5))),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(Icons.menu_rounded, size: 22, color: context.textM),
-            onPressed: () => _mobileScaffoldKey.currentState?.openDrawer(),
-          ),
+          IconButton(icon: Icon(Icons.menu_rounded, size: 22, color: context.textM), onPressed: () => _mobileScaffoldKey.currentState?.openDrawer()),
           Expanded(
             child: Center(
               child: Obx(() {
@@ -340,16 +325,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 7, height: 7, margin: const EdgeInsets.only(right: 6),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isLoading ? AppColors.orange : loaded ? AppColors.green : AppColors.red,
-                        ),
-                      ),
-                      Flexible(
-                        child: Text(label, style: TextStyle(fontSize: 14, fontWeight: loaded ? FontWeight.w600 : FontWeight.w500, color: loaded ? context.text : context.textD), overflow: TextOverflow.ellipsis, maxLines: 1),
-                      ),
+                      Container(width: 7, height: 7, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(shape: BoxShape.circle, color: isLoading ? AppColors.orange : loaded ? AppColors.green : AppColors.red)),
+                      Flexible(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: loaded ? FontWeight.w600 : FontWeight.w500, color: loaded ? context.text : context.textD), overflow: TextOverflow.ellipsis, maxLines: 1)),
                       const SizedBox(width: 4),
                       Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: context.textM),
                     ],
@@ -358,30 +335,14 @@ class _HomeScreenState extends State<HomeScreen> {
               }),
             ),
           ),
-          // Voice mode button
-          IconButton(
-            icon: const Icon(Icons.keyboard_voice, size: 20, color: Colors.blueAccent),
-            onPressed: () => Get.toNamed(AppRoutes.voiceMode),
-            tooltip: 'Voice Mode',
-          ),
-          // Tool toggle
-          Obx(() => IconButton(
-            icon: Icon(Icons.build, size: 20, color: _tools.toolsEnabled.value ? Colors.amber : context.textM),
-            onPressed: _tools.toggleTools,
-            tooltip: _tools.toolsEnabled.value ? 'Tools ON' : 'Tools OFF',
-          )),
-          IconButton(
-            icon: Icon(Icons.edit_square, size: 20, color: context.textM),
-            onPressed: () => _chatCtrl.newChat(),
-          ),
+          IconButton(icon: const Icon(Icons.keyboard_voice, size: 20, color: Colors.blueAccent), onPressed: () => Get.toNamed(AppRoutes.voiceMode), tooltip: 'Voice Mode'),
+          Obx(() => IconButton(icon: Icon(Icons.build, size: 20, color: _tools.toolsEnabled.value ? Colors.amber : context.textM), onPressed: _tools.toggleTools, tooltip: _tools.toolsEnabled.value ? 'Tools ON' : 'Tools OFF')),
+          IconButton(icon: Icon(Icons.edit_square, size: 20, color: context.textM), onPressed: () => _chatCtrl.newChat()),
         ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // DESKTOP LAYOUT
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildDesktopLayout() {
     return Scaffold(
       backgroundColor: context.bg,
@@ -391,15 +352,8 @@ class _HomeScreenState extends State<HomeScreen> {
             SizedBox(
               width: 260,
               child: Container(
-                decoration: BoxDecoration(
-                  color: context.bgSidebar,
-                  border: Border(right: BorderSide(color: context.border, width: 0.5)),
-                ),
-                child: ChatSidebar(
-                  onNewChat: () => _chatCtrl.newChat(),
-                  onSelectChat: (id) => _chatCtrl.switchChat(id),
-                  onDeleteChat: (id) => _chatCtrl.deleteChat(id),
-                ),
+                decoration: BoxDecoration(color: context.bgSidebar, border: Border(right: BorderSide(color: context.border, width: 0.5))),
+                child: ChatSidebar(onNewChat: () => _chatCtrl.newChat(), onSelectChat: (id) => _chatCtrl.switchChat(id), onDeleteChat: (id) => _chatCtrl.deleteChat(id)),
               ),
             ),
           Expanded(
@@ -407,14 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildDesktopTopBar(),
                 _buildAgentStatusBar(),
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 800),
-                      child: _buildChatArea(),
-                    ),
-                  ),
-                ),
+                Expanded(child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 800), child: _buildChatArea()))),
               ],
             ),
           ),
@@ -427,16 +374,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: context.bg,
-        border: Border(bottom: BorderSide(color: context.border, width: 0.5)),
-      ),
+      decoration: BoxDecoration(color: context.bg, border: Border(bottom: BorderSide(color: context.border, width: 0.5))),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(_sidebarOpen ? Icons.view_sidebar_rounded : Icons.view_sidebar_outlined, size: 20, color: context.textM),
-            onPressed: () => setState(() => _sidebarOpen = !_sidebarOpen),
-          ),
+          IconButton(icon: Icon(_sidebarOpen ? Icons.view_sidebar_rounded : Icons.view_sidebar_outlined, size: 20, color: context.textM), onPressed: () => setState(() => _sidebarOpen = !_sidebarOpen)),
           const SizedBox(width: 8),
           Obx(() {
             final fname = _modelCtrl.selectedModelFilename.value;
@@ -459,53 +400,18 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }),
           const Spacer(),
-          // Voice mode button
-          IconButton(
-            icon: const Icon(Icons.keyboard_voice, size: 20, color: Colors.blueAccent),
-            onPressed: () => Get.toNamed(AppRoutes.voiceMode),
-            tooltip: 'Voice Mode',
-          ),
-          // Tool toggle
-          Obx(() => IconButton(
-            icon: Icon(Icons.build, size: 20, color: _tools.toolsEnabled.value ? Colors.amber : context.textM),
-            onPressed: _tools.toggleTools,
-            tooltip: _tools.toolsEnabled.value ? 'Tools ON' : 'Tools OFF',
-          )),
-          // Work folder
-          IconButton(
-            icon: Icon(Icons.folder_open, size: 20, color: context.textM),
-            onPressed: () => Get.toNamed(AppRoutes.workFolder),
-            tooltip: 'Work Folder',
-          ),
+          IconButton(icon: const Icon(Icons.keyboard_voice, size: 20, color: Colors.blueAccent), onPressed: () => Get.toNamed(AppRoutes.voiceMode), tooltip: 'Voice Mode'),
+          Obx(() => IconButton(icon: Icon(Icons.build, size: 20, color: _tools.toolsEnabled.value ? Colors.amber : context.textM), onPressed: _tools.toggleTools, tooltip: _tools.toolsEnabled.value ? 'Tools ON' : 'Tools OFF')),
+          IconButton(icon: Icon(Icons.folder_open, size: 20, color: context.textM), onPressed: () => Get.toNamed(AppRoutes.workFolder), tooltip: 'Work Folder'),
           Obx(() => Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 8, height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _llm.isLoadingModel.value ? AppColors.orange : _llm.isLoaded.value ? AppColors.green : AppColors.red,
-                ),
-              ),
+              Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: _llm.isLoadingModel.value ? AppColors.orange : _llm.isLoaded.value ? AppColors.green : AppColors.red)),
               const SizedBox(width: 6),
               Text(_llm.isLoadingModel.value ? 'Loading... ${(_llm.loadingProgress.value * 100).toInt()}%' : _llm.isLoaded.value ? 'Ready' : 'No Model', style: TextStyle(fontSize: 12, color: context.textD)),
               if (_llm.isLoaded.value && !_llm.isLoadingModel.value) ...[
                 const SizedBox(width: 8),
-                InkWell(
-                  onTap: () => _modelCtrl.unloadCurrentModel(),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.eject_rounded, size: 14, color: AppColors.orange),
-                        const SizedBox(width: 3),
-                        Text('Unload', style: TextStyle(fontSize: 11, color: context.textD)),
-                      ],
-                    ),
-                  ),
-                ),
+                InkWell(onTap: () => _modelCtrl.unloadCurrentModel(), borderRadius: BorderRadius.circular(4), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.eject_rounded, size: 14, color: AppColors.orange), const SizedBox(width: 3), Text('Unload', style: TextStyle(fontSize: 11, color: context.textD))]))),
               ],
               if (_llm.isGenerating.value) ...[
                 const SizedBox(width: 12),
@@ -514,31 +420,20 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           )),
           const SizedBox(width: 8),
-          Obx(() => IconButton(
-            icon: Icon(_themeCtrl.isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined, size: 20, color: context.textM),
-            onPressed: () => _themeCtrl.toggleTheme(),
-          )),
-          IconButton(
-            icon: Icon(Icons.settings_outlined, size: 20, color: context.textM),
-            onPressed: () => Get.toNamed('/settings'),
-          ),
+          Obx(() => IconButton(icon: Icon(_themeCtrl.isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined, size: 20, color: context.textM), onPressed: () => _themeCtrl.toggleTheme())),
+          IconButton(icon: Icon(Icons.settings_outlined, size: 20, color: context.textM), onPressed: () => Get.toNamed('/settings')),
         ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // SHARED — Chat area
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildChatArea() {
     return Column(
       children: [
         Expanded(
           child: Obx(() {
             final chat = _chatCtrl.activeChat;
-            if (chat == null || chat.messages.isEmpty) {
-              return _buildWelcome();
-            }
+            if (chat == null || chat.messages.isEmpty) return _buildWelcome();
             if (_lastRenderedChatId != chat.id) {
               _lastRenderedChatId = chat.id;
               _autoScrollToBottom = true;
@@ -572,30 +467,17 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 56, height: 56,
-              decoration: BoxDecoration(gradient: AppColors.accentGradient, borderRadius: BorderRadius.circular(16)),
-              child: const Icon(Icons.bolt_rounded, size: 32, color: Colors.white),
-            ),
+            Container(width: 56, height: 56, decoration: BoxDecoration(gradient: AppColors.accentGradient, borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.bolt_rounded, size: 32, color: Colors.white)),
             const SizedBox(height: 24),
             Text('How can I help you?', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: context.text)),
             const SizedBox(height: 8),
             Obx(() => Text(_llm.isLoaded.value ? 'Type a message or use voice mode to get started.' : 'Select a model first to begin chatting.', style: TextStyle(fontSize: 14, color: context.textM), textAlign: TextAlign.center)),
             const SizedBox(height: 16),
-            // Quick actions
             Obx(() => _llm.isLoaded.value ? Wrap(
               spacing: 8,
               children: [
-                ActionChip(
-                  avatar: const Icon(Icons.keyboard_voice, size: 16, color: Colors.blueAccent),
-                  label: const Text('Voice Mode'),
-                  onPressed: () => Get.toNamed(AppRoutes.voiceMode),
-                ),
-                ActionChip(
-                  avatar: const Icon(Icons.folder_open, size: 16),
-                  label: const Text('Work Folder'),
-                  onPressed: () => Get.toNamed(AppRoutes.workFolder),
-                ),
+                ActionChip(avatar: const Icon(Icons.keyboard_voice, size: 16, color: Colors.blueAccent), label: const Text('Voice Mode'), onPressed: () => Get.toNamed(AppRoutes.voiceMode)),
+                ActionChip(avatar: const Icon(Icons.folder_open, size: 16), label: const Text('Work Folder'), onPressed: () => Get.toNamed(AppRoutes.workFolder)),
               ],
             ) : const SizedBox.shrink()),
           ],
@@ -659,12 +541,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showModelPicker(BuildContext context) {
-    // ... existing model picker code preserved ...
     final downloaded = _modelCtrl.downloadedModels;
-    if (downloaded.isEmpty) {
-      setState(() => _mobileTabIndex = 1);
-      return;
-    }
+    if (downloaded.isEmpty) { setState(() => _mobileTabIndex = 1); return; }
     showModalBottomSheet(
       context: context,
       backgroundColor: context.bg,
@@ -697,13 +575,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 final isLoading = _modelCtrl.loadingModelFilename.value == filename;
                 return ListTile(
                   dense: true,
-                  leading: Container(
-                    width: 32, height: 32,
-                    decoration: BoxDecoration(color: isActive ? AppColors.green.withOpacity(0.15) : isLoading ? AppColors.orange.withOpacity(0.15) : context.bgHover, borderRadius: BorderRadius.circular(8)),
-                    child: isLoading ? const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.orange)) : Icon(isActive ? Icons.check_rounded : Icons.smart_toy_outlined, size: 16, color: isActive ? AppColors.green : context.textM),
-                  ),
+                  leading: Container(width: 32, height: 32, decoration: BoxDecoration(color: isActive ? AppColors.green.withOpacity(0.15) : isLoading ? AppColors.orange.withOpacity(0.15) : context.bgHover, borderRadius: BorderRadius.circular(8)), child: isLoading ? const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.orange)) : Icon(isActive ? Icons.check_rounded : Icons.smart_toy_outlined, size: 16, color: isActive ? AppColors.green : context.textM)),
                   title: Text(info?.name ?? filename, style: TextStyle(fontSize: 14, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400, color: context.text), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: info != null ? Text('${info.sizeGb} GB • Min ${info.minRamGb} GB RAM', style: TextStyle(fontSize: 11, color: context.textD)) : null,
+                  subtitle: info != null ? Text('${info.sizeGb} GB \u2022 Min ${info.minRamGb} GB RAM', style: TextStyle(fontSize: 11, color: context.textD)) : null,
                   trailing: isActive ? const Text('Active', style: TextStyle(fontSize: 11, color: AppColors.green, fontWeight: FontWeight.w600)) : isLoading ? const Text('Loading...', style: TextStyle(fontSize: 11, color: AppColors.orange, fontWeight: FontWeight.w600)) : null,
                   onTap: () { Navigator.pop(context); if (!isActive && !isLoading) _modelCtrl.loadModel(filename); },
                 );

@@ -105,7 +105,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 .scale(begin: const Offset(0.8, 0.8)),
             const SizedBox(height: 24),
             Text(
-              'Uncensored Local AI',
+              'Agentic AI',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
@@ -115,7 +115,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
             const SizedBox(height: 8),
             Text(
-              'Run uncensored LLMs natively on any device 🔓',
+              'Local AI assistant with device control',
               style: TextStyle(fontSize: 13, color: context.textM),
             ).animate().fadeIn(delay: 400.ms, duration: 600.ms),
             const SizedBox(height: 40),

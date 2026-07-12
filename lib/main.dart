@@ -11,60 +11,80 @@ import 'models/message_model.dart';
 import 'theme/app_theme.dart';
 import 'bindings/app_bindings.dart';
 import 'controllers/theme_controller.dart';
-// ignore: unused_import
-import 'screens/splash_screen.dart'; // needed in routes/app_routes.dart
+import 'screens/splash_screen.dart';
 import 'routes/app_routes.dart';
+import 'services/memory_service.dart';
+import 'services/voice_service.dart';
+import 'services/tool_service.dart';
+import 'services/work_folder_service.dart';
+import 'services/sandbox_service.dart';
 
 Future<void> main() async {
-  // Wrap entire app in error zone to catch native/async crashes
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Catch Flutter framework errors (rendering, layout, etc.)
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
       debugPrint('FlutterError: ${details.exception}');
     };
 
-    // Catch unhandled platform errors (native crashes, isolate errors)
     PlatformDispatcher.instance.onError = (error, stack) {
       debugPrint('PlatformError: $error\n$stack');
-      return true; // Prevent app from crashing
+      return true;
     };
 
-    // Init Hive
     final appDir = await getApplicationDocumentsDirectory();
     await Hive.initFlutter(appDir.path);
 
-    // Register Hive adapters
     Hive.registerAdapter(ChatModelAdapter());
     Hive.registerAdapter(MessageModelAdapter());
     Hive.registerAdapter(MessageRoleAdapter());
 
-    // Open Hive boxes
     await Hive.openBox<ChatModel>('chats');
     await Hive.openBox('settings');
     await Hive.openBox('models_meta');
 
-    // Load theme preference
     final themeController = Get.put(ThemeController());
+
+    // Initialize agentic AI services
+    try {
+      final memoryService = Get.put(MemoryService(), permanent: true);
+      await memoryService.init();
+    } catch (e) { debugPrint('MemoryService init: $e'); }
+
+    try {
+      final voiceService = Get.put(VoiceService(), permanent: true);
+      await voiceService.init();
+    } catch (e) { debugPrint('VoiceService init: $e'); }
+
+    try {
+      Get.put(ToolService(), permanent: true);
+    } catch (e) { debugPrint('ToolService init: $e'); }
+
+    try {
+      final workFolderService = Get.put(WorkFolderService(), permanent: true);
+      await workFolderService.init();
+    } catch (e) { debugPrint('WorkFolderService init: $e'); }
+
+    try {
+      Get.put(SandboxService(), permanent: true);
+    } catch (e) { debugPrint('SandboxService init: $e'); }
 
     runApp(PortableAIApp(themeController: themeController));
   }, (error, stack) {
-    // Last-resort error handler — prevents silent force-close
-    debugPrint('Unhandled error: $error\n$stack');
+    debugPrint('Unhandled: $error\n$stack');
   });
 }
 
 class PortableAIApp extends StatelessWidget {
   final ThemeController themeController;
-  
+
   const PortableAIApp({super.key, required this.themeController});
 
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Uncensored Local AI',
+      title: 'Agentic AI',
       debugShowCheckedModeBanner: false,
       themeMode: themeController.themeMode,
       theme: AppTheme.lightTheme,

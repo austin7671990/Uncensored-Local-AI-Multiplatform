@@ -6,6 +6,11 @@ import '../screens/model_library_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/api_endpoints_screen.dart';
 import '../screens/logs_screen.dart';
+import '../screens/voice_mode_screen.dart';
+import '../screens/work_folder_screen.dart';
+import '../screens/sandbox_screen.dart';
+import '../screens/memory_browser_screen.dart';
+import '../screens/device_info_screen.dart';
 
 class AppRoutes {
   static const splash = '/splash';
@@ -14,6 +19,13 @@ class AppRoutes {
   static const settings = '/settings';
   static const apiEndpoints = '/api-endpoints';
   static const logs = '/logs';
+
+  // Agentic AI Routes
+  static const voiceMode = '/voice_mode';
+  static const workFolder = '/work_folder';
+  static const memoryBrowser = '/memory_browser';
+  static const deviceInfo = '/device_info';
+  static const sandbox = '/sandbox';
 
   static final pages = [
     GetPage(name: splash, page: () => const SplashScreen()),
@@ -36,6 +48,33 @@ class AppRoutes {
     GetPage(
       name: logs,
       page: () => const LogsScreen(),
+      transition: Transition.rightToLeft,
+    ),
+
+    // Agentic AI Screens
+    GetPage(
+      name: voiceMode,
+      page: () => const VoiceModeScreen(),
+      transition: Transition.downToUp,
+    ),
+    GetPage(
+      name: workFolder,
+      page: () => const WorkFolderScreen(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage(
+      name: sandbox,
+      page: () => const SandboxScreen(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage(
+      name: memoryBrowser,
+      page: () => const MemoryBrowserScreen(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage(
+      name: deviceInfo,
+      page: () => const DeviceInfoScreen(),
       transition: Transition.rightToLeft,
     ),
   ];

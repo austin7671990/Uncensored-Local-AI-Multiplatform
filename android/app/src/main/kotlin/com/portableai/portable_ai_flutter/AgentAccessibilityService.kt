@@ -10,16 +10,13 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
-import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
@@ -38,33 +35,29 @@ class AgentAccessibilityService : AccessibilityService() {
         private const val TAG = "AgentAccessibility"
         var instance: AgentAccessibilityService? = null
             private set
-
-        // Pending action from Flutter -> Service
-        @Volatile
-        var pendingResult: MethodChannel.Result? = null
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val executor = Executors.newSingleThreadExecutor()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         Log.i(TAG, "AgentAccessibilityService connected")
 
-        serviceInfo = serviceInfo.apply {
-            // Enable all event types for comprehensive screen reading
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                    AccessibilityEvent.TYPE_VIEW_CLICKED or
-                    AccessibilityEvent.TYPE_VIEW_FOCUSED or
-                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+        val info = serviceInfo ?: AccessibilityServiceInfo()
+        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_CLICKED or
+                AccessibilityEvent.TYPE_VIEW_FOCUSED or
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
 
-            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
-                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        info.flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
 
-            canRetrieveWindowContent = true
-        }
+        info.canRetrieveWindowContent = true
+        setServiceInfo(info)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -339,26 +332,44 @@ class AgentAccessibilityService : AccessibilityService() {
     fun takeScreenshot(): String {
         return try {
             val latch = CountDownLatch(1)
-            var bitmap: Bitmap? = null
+            var resultBitmap: Bitmap? = null
+            var errorMsg: String? = null
 
-            takeScreenshot(Display.DEFAULT_DISPLAY, mainHandler) { screenshot ->
-                bitmap = screenshot.hardwareBuffer?.let { hb ->
-                    Bitmap.wrapHardwareBuffer(hb, null)
+            val callback = object : TakeScreenshotCallback {
+                override fun onSuccess(screenshot: ScreenshotResult) {
+                    try {
+                        val hardwareBuffer = screenshot.hardwareBuffer
+                        if (hardwareBuffer != null) {
+                            resultBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, screenshot.colorSpace)
+                            hardwareBuffer.close()
+                        } else {
+                            errorMsg = "No hardware buffer in screenshot result"
+                        }
+                    } catch (e: Exception) {
+                        errorMsg = "Error processing screenshot: ${e.message}"
+                    }
+                    latch.countDown()
                 }
-                latch.countDown()
+
+                override fun onFailure(errorCode: Int) {
+                    errorMsg = "Screenshot failed with error code: $errorCode"
+                    latch.countDown()
+                }
             }
 
+            takeScreenshot(Display.DEFAULT_DISPLAY, executor, callback)
             latch.await(5, TimeUnit.SECONDS)
 
+            val bitmap = resultBitmap
             if (bitmap != null) {
                 // Save to app's cache directory
                 val file = java.io.File(cacheDir, "screenshot_${System.currentTimeMillis()}.png")
                 file.outputStream().use { out ->
-                    bitmap!!.compress(Bitmap.CompressFormat.PNG, 90, out)
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
                 }
-                "Screenshot saved: ${file.absolutePath} (${bitmap!!.width}x${bitmap!!.height})"
+                "Screenshot saved: ${file.absolutePath} (${bitmap.width}x${bitmap.height})"
             } else {
-                "Screenshot failed: no bitmap captured"
+                errorMsg ?: "Screenshot failed: no bitmap captured"
             }
         } catch (e: Exception) {
             "Screenshot error: ${e.message}. Requires Android 12+ and Accessibility Service with screenshot permission."

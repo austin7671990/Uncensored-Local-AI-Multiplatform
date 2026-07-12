@@ -9,6 +9,7 @@ import '../services/log_service.dart';
 import '../controllers/chat_controller.dart';
 import '../controllers/model_controller.dart';
 import '../controllers/theme_controller.dart';
+import '../controllers/agent_controller.dart';
 
 /// Initial bindings — registers all services and controllers with GetX DI.
 class AppBindings extends Bindings {
@@ -22,10 +23,11 @@ class AppBindings extends Bindings {
     Get.lazyPut(() => WakelockService(), fenix: true);
     Get.lazyPut(() => LogService(), fenix: true);
 
+    // ── Agentic AI Controllers ──────────────────────────────────
+    Get.lazyPut(() => AgentController(), fenix: true);
+
     // ── Controllers ──────────────────────────────────────────────
-    Get.put(
-      ThemeController(),
-    ); // Put instead of lazyPut since we need theme immediately
+    Get.put(ThemeController());
     Get.lazyPut(() => ChatController(), fenix: true);
     Get.lazyPut(() => ModelController(), fenix: true);
   }

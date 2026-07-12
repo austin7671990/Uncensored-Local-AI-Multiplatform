@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 // Minimal HTML entity decoder — handles common entities without extra dependency
 String _decodeHtml(String html) {
-  return html
+  var result = html
       .replaceAll('&amp;', '&')
       .replaceAll('&lt;', '<')
       .replaceAll('&gt;', '>')
@@ -20,15 +20,26 @@ String _decodeHtml(String html) {
       .replaceAll('&rsquo;', "'")
       .replaceAll('&lsquo;', "'")
       .replaceAll('&rdquo;', '"')
-      .replaceAll('&ldquo;', '"')
-      .replaceAll(RegExp(r'&#(\d+);'), (m) {
-        final code = int.tryParse(m.group(1) ?? '0') ?? 0;
-        return String.fromCharCode(code);
-      })
-      .replaceAll(RegExp(r'&#x([0-9a-fA-F]+);'), (m) {
-        final code = int.tryParse(m.group(1) ?? '0', radix: 16) ?? 0;
-        return String.fromCharCode(code);
-      });
+      .replaceAll('&ldquo;', '"');
+  
+  // Decode decimal entities &#123;
+  result = _replaceNumericEntities(result, r'&#(\d+);', 10);
+  // Decode hex entities &#x7B;
+  result = _replaceNumericEntities(result, r'&#x([0-9a-fA-F]+);', 16);
+  
+  return result;
+}
+
+String _replaceNumericEntities(String input, String pattern, int radix) {
+  final regex = RegExp(pattern);
+  var result = input;
+  Match? match;
+  while ((match = regex.firstMatch(result)) != null) {
+    final code = int.tryParse(match!.group(1) ?? '0', radix: radix) ?? 0;
+    final char = String.fromCharCode(code);
+    result = result.replaceRange(match.start, match.end, char);
+  }
+  return result;
 }
 
 Future<String> webSearch(String query) async {
